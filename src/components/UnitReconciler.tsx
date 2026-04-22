@@ -145,6 +145,7 @@ function reconcile(
 
     if (!vName) {
       const updated = [...row];
+      clearVehicleData(updated);
       updated[nameIdx] = sysCustomer;
       inPlace.push(updated);
       changes.push({ kind: "added", unit, customer: sysCustomer });
