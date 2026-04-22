@@ -1,5 +1,6 @@
-import { AppShell, Title, Container } from "@mantine/core";
+import { AppShell, Title, Container, Divider, Stack } from "@mantine/core";
 import InsuranceReport from "./InsuranceReport";
+import UnitReconciler from "./UnitReconciler";
 
 function App() {
   return (
@@ -11,7 +12,11 @@ function App() {
       </AppShell.Header>
       <AppShell.Main>
         <Container>
-          <InsuranceReport />
+          <Stack gap="xl">
+            <InsuranceReport />
+            <Divider />
+            <UnitReconciler />
+          </Stack>
         </Container>
       </AppShell.Main>
     </AppShell>
