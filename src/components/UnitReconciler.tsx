@@ -60,6 +60,10 @@ function isBlankRow(row: Row): boolean {
   return row.every((cell) => cellText(cell) === "");
 }
 
+function isVehicleUnit(unit: string): boolean {
+  return /^([A-Za-z])\1/.test(unit);
+}
+
 function reconcile(
   systemRows: Record<string, unknown>[],
   vehicleHeaders: string[],
@@ -84,8 +88,8 @@ function reconcile(
   const systemCustomers = new Set<string>();
   for (const r of systemRows) {
     const unit = cellText(r[SYSTEM_UNIT_COLUMN]);
+    if (!unit || !isVehicleUnit(unit)) continue;
     const customer = cellText(r[SYSTEM_CUSTOMER_COLUMN]);
-    if (!unit) continue;
     systemByUnit.set(unit, customer);
     if (customer) systemCustomers.add(normalize(customer));
   }
@@ -351,7 +355,9 @@ export default function UnitReconciler() {
       <Text c="dimmed" size="sm">
         Drop the current system export and the current vehicle sheet. The tool
         compares them by unit and produces an updated vehicle sheet plus a
-        changelog. Vehicle info you've already collected is preserved when
+        changelog. Only system rows whose Room Number starts with a double
+        letter (AA, BB, …) are considered — single-letter self-storage spaces
+        are skipped. Vehicle info you've already collected is preserved when
         possible, and orphaned rows (customer still in system but no longer in
         the same unit) are moved to the bottom for review.
       </Text>
