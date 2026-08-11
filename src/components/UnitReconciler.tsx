@@ -1,3 +1,5 @@
+// Note: system == rent roll, vehicle sheet == lot inventory
+
 import { useMemo, useState } from "react";
 import {
   Alert,
@@ -76,7 +78,7 @@ function reconcile(
   const nameIdx = colIdx.get(VEHICLE_NAME_COLUMN);
   if (unitIdx == null || nameIdx == null) {
     throw new Error(
-      `Vehicle sheet must contain "${VEHICLE_UNIT_COLUMN}" and "${VEHICLE_NAME_COLUMN}" columns.`,
+      `Lot inventory must contain "${VEHICLE_UNIT_COLUMN}" and "${VEHICLE_NAME_COLUMN}" columns.`,
     );
   }
   const parkedIdx = colIdx.get(VEHICLE_PARKED_COLUMN);
@@ -132,7 +134,9 @@ function reconcile(
     if (sysEmpty && vName) {
       if (systemCustomers.has(normalize(vName))) {
         orphans.push(makeOrphan(row));
-        inPlace.push(null);
+        const updated = new Array(row.length);
+        updated[unitIdx] = row[unitIdx];
+        inPlace.push(updated);
         changes.push({ kind: "orphaned", unit, customer: vName });
       } else {
         const updated = [...row];
@@ -202,7 +206,7 @@ async function readSystemSheet(file: File): Promise<Record<string, unknown>[]> {
   const buffer = await file.arrayBuffer();
   const book = XLSX.read(buffer, { type: "array" });
   const name = book.SheetNames[0];
-  if (!name) throw new Error("System workbook has no sheets.");
+  if (!name) throw new Error("Rent roll workbook has no sheets.");
   return XLSX.utils.sheet_to_json<Record<string, unknown>>(book.Sheets[name], {
     defval: "",
   });
@@ -220,7 +224,7 @@ async function readVehicleSheet(
     defval: "",
     blankrows: false,
   });
-  if (aoa.length === 0) throw new Error("Vehicle sheet is empty.");
+  if (aoa.length === 0) throw new Error("Lot inventory is empty.");
   const headers = aoa[0].map((h) => String(h ?? ""));
   const rows = aoa.slice(1);
   while (rows.length > 0 && isBlankRow(rows[rows.length - 1])) rows.pop();
@@ -259,9 +263,9 @@ const KIND_ORDER: Change["kind"][] = [
 function describe(change: Change): string {
   switch (change.kind) {
     case "cleared":
-      return `Cleared vehicle info for ${change.customer} (no longer in system)`;
+      return `Cleared vehicle info for ${change.customer} (no longer in rent roll)`;
     case "orphaned":
-      return `Moved ${change.customer} to bottom (still in system, possibly moved spaces)`;
+      return `Moved ${change.customer} to bottom (still in rent roll, possibly moved spaces)`;
     case "added":
       return `Wrote customer name ${change.customer}`;
     case "swapped":
@@ -290,7 +294,7 @@ export default function UnitReconciler() {
     try {
       setSystemRows(await readSystemSheet(file));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to read system sheet.");
+      setError(e instanceof Error ? e.message : "Failed to read rent roll.");
     }
   }
 
@@ -304,7 +308,7 @@ export default function UnitReconciler() {
       setVehicleData(await readVehicleSheet(file));
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : "Failed to read vehicle sheet.",
+        e instanceof Error ? e.message : "Failed to read lot inventory sheet.",
       );
     }
   }
@@ -354,13 +358,13 @@ export default function UnitReconciler() {
     <Stack gap="md">
       <Title order={2}>Vehicle sheet reconciler</Title>
       <Text c="dimmed" size="sm">
-        Drop the current system export and the current vehicle sheet. The tool
-        compares them by unit and produces an updated vehicle sheet plus a
-        changelog. Only system rows whose Room Number starts with a double
-        letter (AA, BB, …) are considered — single-letter self-storage spaces
-        are skipped. Vehicle info you've already collected is preserved when
-        possible, and orphaned rows (customer still in system but no longer in
-        the same unit) are moved to the bottom for review.
+        Drop the current rent roll and lot inventory sheets. The tool compares
+        them by unit and produces an updated vehicle sheet plus a changelog.
+        Only rent roll rows whose Room Number starts with a double letter (AA,
+        BB, …) are considered — single-letter self-storage spaces are skipped.
+        Vehicle info you've already collected is preserved when possible, and
+        orphaned rows (customer still in rent roll but no longer in the same
+        unit) are moved to the bottom for review.
       </Text>
 
       <Group grow align="stretch">
@@ -371,7 +375,7 @@ export default function UnitReconciler() {
           maxSize={20 * 1024 * 1024}
         >
           <Stack gap={4} align="center" mih={120} justify="center">
-            <Text size="lg">System export (.xlsx)</Text>
+            <Text size="lg">Rent roll export (.xlsx)</Text>
             <Text size="sm" c="dimmed">
               {systemFile ? systemFile.name : "drop or click to browse"}
             </Text>
@@ -384,7 +388,7 @@ export default function UnitReconciler() {
           maxSize={20 * 1024 * 1024}
         >
           <Stack gap={4} align="center" mih={120} justify="center">
-            <Text size="lg">Vehicle sheet (.xlsx)</Text>
+            <Text size="lg">Lot inventory sheet (.xlsx)</Text>
             <Text size="sm" c="dimmed">
               {vehicleFile ? vehicleFile.name : "drop or click to browse"}
             </Text>
@@ -422,7 +426,7 @@ export default function UnitReconciler() {
 
           {result.changes.length === 0 ? (
             <Alert color="green" title="No changes">
-              The vehicle sheet already matches the system export.
+              The lot inventory already matches the rent roll.
             </Alert>
           ) : (
             <Table striped withTableBorder>
