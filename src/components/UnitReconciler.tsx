@@ -45,6 +45,7 @@ type ReconcileResult = {
   headers: string[];
   rows: Row[];
   changes: Change[];
+  unitFilter: { skipSelfStorage: boolean; skippedUnits: number };
 };
 
 function normalize(name: unknown): string {
@@ -62,7 +63,10 @@ function isBlankRow(row: Row): boolean {
   return row.every((cell) => cellText(cell) === "");
 }
 
-function isVehicleUnit(unit: string): boolean {
+// Lots with self-storage name vehicle spaces with a doubled letter (AA1, BB12)
+// and use single letters for storage units. Lots without self-storage use single
+// letters for their spaces, so this is a hint about the lot, not a hard rule.
+function isDoubleLetterUnit(unit: string): boolean {
   return /^([A-Za-z])\1/.test(unit);
 }
 
@@ -86,11 +90,23 @@ function reconcile(
     colIdx.get(c),
   ).filter((x): x is number => x != null);
 
+  // If the rent roll has no doubled-letter rooms at all, this lot doesn't use
+  // that convention and every room number is a space. The rent roll lists rooms
+  // whether or not they're occupied, so "none found" means the lot has none.
+  const skipSelfStorage = systemRows.some((r) =>
+    isDoubleLetterUnit(cellText(r[SYSTEM_UNIT_COLUMN])),
+  );
+  let skippedUnits = 0;
+
   const systemByUnit = new Map<string, string>();
   const systemCustomers = new Set<string>();
   for (const r of systemRows) {
     const unit = cellText(r[SYSTEM_UNIT_COLUMN]);
-    if (!unit || !isVehicleUnit(unit)) continue;
+    if (!unit) continue;
+    if (skipSelfStorage && !isDoubleLetterUnit(unit)) {
+      skippedUnits += 1;
+      continue;
+    }
     const customer = cellText(r[SYSTEM_CUSTOMER_COLUMN]);
     systemByUnit.set(unit, customer);
     if (customer) systemCustomers.add(normalize(customer));
@@ -199,7 +215,12 @@ function reconcile(
     ...orphans,
   ];
 
-  return { headers: vehicleHeaders, rows: finalRows, changes };
+  return {
+    headers: vehicleHeaders,
+    rows: finalRows,
+    changes,
+    unitFilter: { skipSelfStorage, skippedUnits },
+  };
 }
 
 async function readSystemSheet(file: File): Promise<Record<string, unknown>[]> {
@@ -359,11 +380,11 @@ export default function UnitReconciler() {
       <Title order={2}>Vehicle sheet reconciler</Title>
       <Text c="dimmed" size="sm">
         Drop the current rent roll and lot inventory sheets. The tool compares
-        them by unit and produces an updated vehicle sheet plus a changelog.
-        Only rent roll rows whose Room Number starts with a double letter (AA,
-        BB, …) are considered — single-letter self-storage spaces are skipped.
-        Vehicle info you've already collected is preserved when possible, and
-        orphaned rows (customer still in rent roll but no longer in the same
+        them by unit and produces an updated vehicle sheet plus a changelog. It
+        works out how this lot names its spaces from the rent roll, so
+        single-letter self-storage rooms are skipped only at lots that have
+        them. Vehicle info you've already collected is preserved when possible,
+        and orphaned rows (customer still in rent roll but no longer in the same
         unit) are moved to the bottom for review.
       </Text>
 
@@ -423,6 +444,12 @@ export default function UnitReconciler() {
               Download .xlsx
             </Button>
           </Group>
+
+          <Text size="sm" c="dimmed">
+            {result.unitFilter.skipSelfStorage
+              ? `Skipped ${result.unitFilter.skippedUnits} single-letter self-storage ${result.unitFilter.skippedUnits === 1 ? "room" : "rooms"}.`
+              : "No double-letter spaces in this rent roll — treating every room number as a space."}
+          </Text>
 
           {result.changes.length === 0 ? (
             <Alert color="green" title="No changes">
