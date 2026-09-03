@@ -21,7 +21,7 @@ const VEHICLE_UNIT_COLUMN = "Unit";
 const VEHICLE_NAME_COLUMN = "Name";
 const VEHICLE_PARKED_COLUMN = "PARKED TODAY";
 const VEHICLE_VEHICLE_COLUMNS = [
-  "CONTRACT Property Make/Model/Year",
+  "Property Make/Model/Year",
   "License Plate",
   "VIN",
 ];
@@ -78,17 +78,23 @@ function reconcile(
   const colIdx = new Map<string, number>();
   vehicleHeaders.forEach((h, i) => colIdx.set(h, i));
 
-  const unitIdx = colIdx.get(VEHICLE_UNIT_COLUMN);
-  const nameIdx = colIdx.get(VEHICLE_NAME_COLUMN);
-  if (unitIdx == null || nameIdx == null) {
+  const missing = [
+    VEHICLE_UNIT_COLUMN,
+    VEHICLE_NAME_COLUMN,
+    ...VEHICLE_VEHICLE_COLUMNS,
+  ].filter((c) => colIdx.get(c) == null);
+  if (missing.length > 0) {
+    const quote = (c: string) => `"${c}"`;
     throw new Error(
-      `Lot inventory must contain "${VEHICLE_UNIT_COLUMN}" and "${VEHICLE_NAME_COLUMN}" columns.`,
+      `Lot inventory is missing ${missing.map(quote).join(", ")}. ` +
+        `Columns found: ${vehicleHeaders.map(quote).join(", ")}.`,
     );
   }
+
+  const unitIdx = colIdx.get(VEHICLE_UNIT_COLUMN)!;
+  const nameIdx = colIdx.get(VEHICLE_NAME_COLUMN)!;
   const parkedIdx = colIdx.get(VEHICLE_PARKED_COLUMN);
-  const vehicleInfoIdxs = VEHICLE_VEHICLE_COLUMNS.map((c) =>
-    colIdx.get(c),
-  ).filter((x): x is number => x != null);
+  const vehicleInfoIdxs = VEHICLE_VEHICLE_COLUMNS.map((c) => colIdx.get(c)!);
 
   // If the rent roll has no doubled-letter rooms at all, this lot doesn't use
   // that convention and every room number is a space. The rent roll lists rooms
@@ -118,14 +124,14 @@ function reconcile(
   const seenUnits = new Set<string>();
 
   function clearVehicleData(row: Row) {
-    row[nameIdx!] = "";
+    row[nameIdx] = "";
     for (const i of vehicleInfoIdxs) row[i] = "";
     if (parkedIdx != null) row[parkedIdx] = "";
   }
 
   function makeOrphan(originalRow: Row): Row {
     const orphan = [...originalRow];
-    orphan[unitIdx!] = "";
+    orphan[unitIdx] = "";
     return orphan;
   }
 
@@ -178,9 +184,8 @@ function reconcile(
     }
 
     const updated = [...row];
+    clearVehicleData(updated);
     updated[nameIdx] = sysCustomer;
-    for (const i of vehicleInfoIdxs) updated[i] = "";
-    if (parkedIdx != null) updated[parkedIdx] = "";
     inPlace.push(updated);
 
     let oldDisposition: "cleared" | "orphaned";
